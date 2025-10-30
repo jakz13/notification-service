@@ -1,28 +1,27 @@
 from flask import Flask, request, jsonify
 import smtplib
-from email.mime.text import MIMEText
 import os
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import logging
 
 app = Flask(__name__)
 
-# Configuración desde variables de entorno
-SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-SMTP_USERNAME = os.getenv('SMTP_USERNAME')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
-ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'admin@example.com')
-
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy'}), 200
-
+# Configuración logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @app.route('/notify', methods=['POST'])
-def send_notification():
+def notify():
+    """
+    Endpoint para enviar notificaciones por email
+    Espera JSON: {'name': 'Juan', 'email': 'juan@test.com', 'phone': '123456789'}
+    """
     try:
-        data = request.json
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'No se recibieron datos JSON'}), 400
 
         # Validar datos requeridos
         required_fields = ['name', 'email', 'phone']
@@ -30,48 +29,71 @@ def send_notification():
             if field not in data:
                 return jsonify({'error': f'Campo requerido faltante: {field}'}), 400
 
-        # Crear mensaje de email
-        subject = f"Nuevo usuario registrado: {data['name']}"
-        body = f"""
-Se ha registrado un nuevo usuario en el sistema:
-
-Nombre: {data['name']}
-Email: {data['email']}
-Teléfono: {data['phone']}
-
-Este es un mensaje automático del sistema de notificaciones.
-"""
+        name = data['name']
+        user_email = data['email']
+        phone = data['phone']
 
         # Enviar email
-        msg = MIMEText(body)
-        msg['Subject'] = subject
-        msg['From'] = SMTP_USERNAME if SMTP_USERNAME else 'no-reply@example.com'
-        msg['To'] = ADMIN_EMAIL
+        send_notification_email(name, user_email, phone)
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            # MailHog (dev) listens on port 1025 and does not support STARTTLS/login.
-            # Allow overriding with SMTP_USE_TLS env var if needed.
-            smtp_use_tls = os.getenv('SMTP_USE_TLS')
-            if smtp_use_tls is None:
-                # default: enable TLS except for common dev SMTP ports (1025)
-                use_tls = SMTP_PORT not in (1025,)
-            else:
-                use_tls = smtp_use_tls.lower() in ('1', 'true', 'yes')
-
-            if use_tls:
-                server.starttls()
-                if SMTP_USERNAME and SMTP_PASSWORD:
-                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
-
-            server.send_message(msg)
-
-        app.logger.info(f"Notificación enviada para usuario: {data['name']}")
-        return jsonify({'message': 'Notificación enviada exitosamente'}), 200
+        logger.info(f"✅ Notificación enviada para usuario: {name} ({user_email})")
+        return jsonify({
+            'status': 'success',
+            'message': 'Notificación enviada correctamente'
+        }), 200
 
     except Exception as e:
-        app.logger.error(f"Error enviando notificación: {str(e)}")
+        logger.error(f"❌ Error en notificación: {str(e)}")
         return jsonify({'error': 'Error interno del servidor'}), 500
 
+def send_notification_email(name, user_email, phone):
+    """
+    Envía un email de notificación cuando se crea un usuario
+    """
+    # Configuración SMTP desde variables de entorno
+    smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+    smtp_port = int(os.getenv('SMTP_PORT', 587))
+    smtp_username = os.getenv('SMTP_USERNAME', '')
+    smtp_password = os.getenv('SMTP_PASSWORD', '')
+    admin_email = os.getenv('ADMIN_EMAIL', smtp_username)
+
+    # Crear mensaje
+    subject = "🎉 Nuevo usuario registrado"
+    body = f"""
+    Se ha registrado un nuevo usuario en el sistema:
+
+    📋 Información del usuario:
+    • Nombre: {name}
+    • Email: {user_email}
+    • Teléfono: {phone}
+
+    ⏰ Fecha: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+    Saludos,
+    Sistema de Registro de Usuarios
+    """
+
+    # Configurar email
+    msg = MIMEMultipart()
+    msg['From'] = smtp_username
+    msg['To'] = admin_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Enviar email
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_username, smtp_password)
+        server.send_message(msg)
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Endpoint de salud del servicio"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'notification-service',
+        'message': 'Servicio de notificaciones funcionando'
+    })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)
