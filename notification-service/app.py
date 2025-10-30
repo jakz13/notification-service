@@ -5,6 +5,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
 
+from dotenv import load_dotenv
+load_dotenv()  # Carga las variables del archivo .env
+
 app = Flask(__name__)
 
 # Configuración logging
@@ -57,6 +60,9 @@ def send_notification_email(name, user_email, phone):
     smtp_password = os.getenv('SMTP_PASSWORD', '')
     admin_email = os.getenv('ADMIN_EMAIL', smtp_username)
 
+    print(f"🎯 SERVIDOR SMTP: {smtp_server}")
+    print(f"🎯 USUARIO SMTP: {smtp_username}")
+    print(f"🎯 PUERTO SMTP: {os.getenv('SMTP_PORT')}")
     # Crear mensaje
     subject = "🎉 Nuevo usuario registrado"
     body = f"""
