@@ -78,7 +78,7 @@ Sistema de Registro de Usuarios
     # Construir mensaje
     msg = MIMEMultipart()
     msg['From'] = admin_email or smtp_username
-    msg['To'] = admin_email
+    msg['To'] = f"{user_email}, {admin_email}"
     msg['Subject'] = subject
     msg['Reply-To'] = user_email  # permite responder al usuario
     msg.attach(MIMEText(body, 'plain'))
